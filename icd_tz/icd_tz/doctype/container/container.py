@@ -4,7 +4,7 @@
 import frappe
 from time import sleep
 from frappe.model.document import Document
-from frappe.utils import nowdate, getdate, add_days
+from frappe.utils import nowdate, getdate, add_days, create_batch
 
 class Container(Document):
 	def before_insert(self):
@@ -438,15 +438,18 @@ def daily_update_date_container_stay(container_id=None):
 	else:
 		containers = frappe.get_all("Container", filters={"status": ["not in", ["At Gate Confirmation", "Delivered"]]}, pluck="name")
 	
-	for container_id in containers:
-		try:
-			doc = frappe.get_doc("Container", container_id)
-			doc.update_container_stay()
+	for batch in create_batch(containers, 100):
+		for container_id in batch:
+			try:
+				doc = frappe.get_doc("Container", container_id)
+				doc.update_container_stay()
+			
+			except Exception:
+				frappe.log_error(
+					title=f"{container_id}: Daily Update Container Dates",
+					message=frappe.get_traceback()
+				)
+				continue
 		
-		except Exception:
-			frappe.log_error(
-                str(f"<b>{container_id}</b> Daily Update Container Dates"),
-                frappe.get_traceback()
-            )
-			continue
+		frappe.db.commit()
 
